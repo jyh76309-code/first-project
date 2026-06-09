@@ -174,7 +174,7 @@ export default function GeneratePage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-6 py-10">
+    <div className="mx-auto max-w-2xl px-6 py-10 pb-24 md:pb-10">
       <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
         {/* ----- Toast 提示 ----- */}
         {toast && (
@@ -194,7 +194,7 @@ export default function GeneratePage() {
           <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
             选择平台
           </label>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 sm:gap-3">
+          <div className="flex gap-2 overflow-x-auto pb-1 sm:grid sm:grid-cols-5 sm:gap-3 sm:overflow-visible sm:pb-0">
             {PLATFORMS.map((p) => (
               <button
                 key={p.value}
@@ -267,7 +267,7 @@ export default function GeneratePage() {
         </div>
 
         {/* ----- 生成按钮 ----- */}
-        <div className="pt-2">
+        <div className="fixed bottom-0 left-0 right-0 border-t border-zinc-100 bg-white/95 p-4 backdrop-blur-md md:relative md:border-0 md:bg-transparent md:p-0 md:pt-2 dark:border-zinc-800 dark:bg-zinc-900/95 dark:md:bg-transparent">
           <button
             type="submit"
             disabled={loading || !topic.trim()}
