@@ -79,10 +79,14 @@ export default function AuthPage() {
         const { error: profileError } = await supabase
           .from('profiles')
           .insert({ id: data.user.id, username: username.trim() })
-        console.log('【注册】存入 profiles 结果', { error: profileError?.message })
+        console.log('【注册】存入 profiles 结果', { error: profileError?.message, code: profileError?.code })
 
         if (profileError) {
-          throw new Error('用户名已被占用')
+          // 区分不同类型的错误
+          if (profileError.code === '23505') {
+            throw new Error('用户名已被占用')
+          }
+          throw new Error(profileError.message)
         }
 
         success = true

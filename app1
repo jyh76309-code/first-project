@@ -1,66 +1,45 @@
-Vercel 部署失败，报错 next-pwa 和 Turbopack 不兼容。
+帮我修复两个问题：
 
-帮我换一个兼容的方案：
+【问题一】Header 顶部错位
+components/Header.tsx 加载用户状态时有闪烁和错位，修复方案：
+- 添加 isLoading 状态，初始值 true
+- 获取用户信息完成后设置 isLoading = false
+- isLoading 为 true 时 Header 右侧显示空白占位，
+  不显示"登录/注册"或用户名，避免布局跳动：
+  {isLoading ? (
+    <div className="w-24 h-8" />
+  ) : user ? (
+    <用户名+退出按钮>
+  ) : (
+    <登录注册按钮>
+  )}
 
-【第一步】卸载 next-pwa
-npm uninstall next-pwa
+【问题二】任何用户名都显示"已被占用"
+检查 app/api/auth/register/route.ts 里判断用户名是否存在的逻辑：
 
-【第二步】修改 next.config.ts，去掉 next-pwa 的配置，改成：
-const nextConfig = {
-  devIndicators: false,
-}
+1. 打印日志看实际查询结果：
+   console.log('查询用户名结果', data, error)
 
-export default nextConfig
+2. 问题很可能是查询语句写错了，正确写法：
+   const { data: existingUser, error: queryError } = await supabase
+     .from('users')
+     .select('id')
+     .eq('username', username)
+     .maybeSingle()  // 用 maybeSingle 而不是 single
+   
+   console.log('existingUser:', existingUser, 'queryError:', queryError)
+   
+   // 只有 existingUser 不为 null 才说明用户名被占用
+   if (existingUser) {
+     return Response.json(
+       { error: '用户名已被占用' },
+       { status: 400 }
+     )
+   }
 
-【第三步】手动创建 Service Worker
-创建 public/sw.js：
-const CACHE_NAME = 'ai-copywriter-v1'
-const urlsToCache = ['/', '/generate', '/history']
+3. 修复后重新部署：
+   git add .
+   git commit -m "fix: 修复注册用户名误报已占用 + Header 错位"
+   git push
 
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache))
-  )
-})
-
-self.addEventListener('fetch', event => {
-  event.respondWith(
-    caches.match(event.request).then(response => {
-      return response || fetch(event.request)
-    })
-  )
-})
-
-【第四步】在 app/layout.tsx 注册 Service Worker
-在最顶部加：
-'use client' 放在一个单独的组件里
-
-创建 components/ServiceWorkerRegistration.tsx：
-'use client'
-import { useEffect } from 'react'
-
-export default function ServiceWorkerRegistration() {
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js')
-        .then(() => console.log('SW registered'))
-        .catch(err => console.log('SW registration failed', err))
-    }
-  }, [])
-  return null
-}
-
-在 app/layout.tsx 引入这个组件，放在 <body> 里。
-
-【第五步】确认 public/manifest.json 还在，icons 文件夹也在
-
-【第六步】本地构建测试
-npm run build
-确认没有报错
-
-【第七步】推送到 GitHub
-git add .
-git commit -m "fix: 替换 next-pwa 为手动 Service Worker，修复 Turbopack 兼容问题"
-git push
-
-完成后告诉我构建是否成功。
+完成后告诉我注册接口的日志输出。

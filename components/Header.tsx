@@ -10,6 +10,7 @@ export default function Header() {
   const router = useRouter()
   const [username, setUsername] = useState<string | null>(null)
   const [loggedIn, setLoggedIn] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
@@ -17,7 +18,6 @@ export default function Header() {
 
     const updateUser = async (userId: string) => {
       setLoggedIn(true)
-      // 查询 profiles 表获取用户名
       const { data: profile } = await supabase
         .from('profiles')
         .select('username')
@@ -25,15 +25,16 @@ export default function Header() {
         .maybeSingle()
       console.log('Header: 用户已登录, userId:', userId, 'profile:', profile)
       setUsername(profile?.username || null)
+      setIsLoading(false)
     }
 
     const clearUser = () => {
       console.log('Header: 用户未登录')
       setLoggedIn(false)
       setUsername(null)
+      setIsLoading(false)
     }
 
-    // 获取初始用户状态
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
         updateUser(user.id)
@@ -45,7 +46,6 @@ export default function Header() {
       clearUser()
     })
 
-    // 监听登录/退出状态变化
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('Header: onAuthStateChange', event, session?.user?.id)
@@ -78,7 +78,6 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/80 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/80">
       <div className="mx-auto flex h-14 max-w-2xl items-center justify-between px-6">
-        {/* Logo */}
         <Link
           href="/"
           className="flex items-center gap-1.5 text-lg font-bold text-zinc-900 dark:text-zinc-100"
@@ -87,7 +86,6 @@ export default function Header() {
           <span>文案助手</span>
         </Link>
 
-        {/* 导航 + 用户信息 */}
         <div className="flex items-center gap-1">
           <nav className="flex items-center gap-1">
             {navLinks.map((link) => {
@@ -108,18 +106,10 @@ export default function Header() {
             })}
           </nav>
 
-          {/* 未登录：显示登录/注册入口 */}
-          {!loggedIn && (
-            <Link
-              href="/auth"
-              className="ml-2 rounded-lg bg-[#7C3AED] px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-[#6D28D9]"
-            >
-              登录 / 注册
-            </Link>
-          )}
-
-          {/* 已登录：显示用户名 */}
-          {loggedIn && (
+          {/* 加载中：空白占位，防止布局跳动 */}
+          {isLoading ? (
+            <div className="ml-2 w-24 h-8" />
+          ) : loggedIn ? (
             <div className="relative ml-2">
               <button
                 onClick={() => setMenuOpen(!menuOpen)}
@@ -151,6 +141,13 @@ export default function Header() {
                 </>
               )}
             </div>
+          ) : (
+            <Link
+              href="/auth"
+              className="ml-2 rounded-lg bg-[#7C3AED] px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-[#6D28D9]"
+            >
+              登录 / 注册
+            </Link>
           )}
         </div>
       </div>
