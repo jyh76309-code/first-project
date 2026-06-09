@@ -15,38 +15,44 @@ export default function Header() {
   useEffect(() => {
     const supabase = createClient()
 
-    // 获取初始用户状态
-    const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        setLoggedIn(true)
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('username')
-          .eq('id', user.id)
-          .single()
-        setUsername(profile?.username || '')
-      } else {
-        setLoggedIn(false)
-        setUsername(null)
-      }
+    const updateUser = async (userId: string) => {
+      setLoggedIn(true)
+      // 查询 profiles 表获取用户名
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('id', userId)
+        .maybeSingle()
+      console.log('Header: 用户已登录, userId:', userId, 'profile:', profile)
+      setUsername(profile?.username || null)
     }
-    getUser()
 
-    // 监听登录/退出状态变化，自动更新
+    const clearUser = () => {
+      console.log('Header: 用户未登录')
+      setLoggedIn(false)
+      setUsername(null)
+    }
+
+    // 获取初始用户状态
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        updateUser(user.id)
+      } else {
+        clearUser()
+      }
+    }).catch((err) => {
+      console.error('Header: getUser 失败', err)
+      clearUser()
+    })
+
+    // 监听登录/退出状态变化
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('Header: onAuthStateChange', event, session?.user?.id)
         if (session?.user) {
-          setLoggedIn(true)
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('username')
-            .eq('id', session.user.id)
-            .single()
-          setUsername(profile?.username || '')
+          await updateUser(session.user.id)
         } else {
-          setLoggedIn(false)
-          setUsername(null)
+          clearUser()
         }
       },
     )
@@ -113,14 +119,14 @@ export default function Header() {
           )}
 
           {/* 已登录：显示用户名 */}
-          {loggedIn && username && (
+          {loggedIn && (
             <div className="relative ml-2">
               <button
                 onClick={() => setMenuOpen(!menuOpen)}
                 className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
               >
                 <span className="hidden sm:inline truncate max-w-[120px]">
-                  {username}
+                  {username || '用户'}
                 </span>
                 <span className="text-xs">▼</span>
               </button>
@@ -133,7 +139,7 @@ export default function Header() {
                   />
                   <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-xl border border-zinc-200 bg-white py-1.5 shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
                     <div className="border-b border-zinc-100 px-3 py-2 text-xs text-zinc-400 dark:border-zinc-700 sm:hidden">
-                      {username}
+                      {username || '用户'}
                     </div>
                     <button
                       onClick={handleLogout}
