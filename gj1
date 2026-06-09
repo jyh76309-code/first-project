@@ -1,0 +1,125 @@
+帮我给文案生成器添加用户注册登录功能，每个用户只能看到自己的历史记录。
+
+【第一步】在 Supabase 开启 Auth 功能并修改数据库
+
+在 Supabase SQL Editor 运行以下 SQL：
+
+-- 给 generations 表添加 user_id 字段
+alter table generations add column user_id uuid references auth.users(id);
+
+-- 删除旧的权限策略
+drop policy if exists "allow_all" on generations;
+
+-- 新的权限策略：每个用户只能看到/操作自己的数据
+create policy "用户只能查看自己的记录" on generations
+  for select using (auth.uid() = user_id);
+
+create policy "用户只能插入自己的记录" on generations
+  for insert with check (auth.uid() = user_id);
+
+create policy "用户只能删除自己的记录" on generations
+  for delete using (auth.uid() = user_id);
+
+【第二步】安装 Supabase Auth 相关包
+npm install @supabase/ssr
+
+【第三步】修改 lib/supabase.ts
+创建两个客户端：
+- 浏览器端客户端（用于前端组件）
+- 服务端客户端（用于 API 路由，能读取用户 session）
+
+参考代码：
+// 浏览器端
+import { createBrowserClient } from '@supabase/ssr'
+export const createClient = () =>
+  createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+
+// 服务端（在 API 路由里用）
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+export const createServerSupabaseClient = async () => {
+  const cookieStore = await cookies()
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll() },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options))
+        },
+      },
+    }
+  )
+}
+
+【第四步】创建注册/登录页面 app/auth/page.tsx
+- 一个页面包含两个 Tab：登录 / 注册
+- 注册：邮箱 + 密码 + 确认密码
+- 登录：邮箱 + 密码
+- 调用 Supabase Auth：
+  注册：supabase.auth.signUp({ email, password })
+  登录：supabase.auth.signInWithPassword({ email, password })
+- 注册成功提示："注册成功，请查收邮件验证账号"
+- 登录成功跳转到 /generate
+- 样式和其他页面保持一致，主色紫色
+
+【第五步】创建 middleware.ts（项目根目录）
+保护需要登录才能访问的页面：
+import { createServerClient } from '@supabase/ssr'
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+
+export async function middleware(request: NextRequest) {
+  let supabaseResponse = NextResponse.next({ request })
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return request.cookies.getAll() },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value))
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options))
+        },
+      },
+    }
+  )
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  // 未登录访问 /generate 或 /history，跳转到登录页
+  if (!user && (request.nextUrl.pathname.startsWith('/generate') || 
+      request.nextUrl.pathname.startsWith('/history'))) {
+    return NextResponse.redirect(new URL('/auth', request.url))
+  }
+  return supabaseResponse
+}
+
+export const config = {
+  matcher: ['/generate/:path*', '/history/:path*']
+}
+
+【第六步】修改 app/api/generate/route.ts
+生成文案时把 user_id 一起存入数据库：
+- 用 createServerSupabaseClient 获取当前用户
+- saveGeneration 时传入 user_id: user.id
+
+【第七步】修改 lib/supabase.ts 的 saveGeneration 和 getHistory
+- saveGeneration 接收并存储 user_id 字段
+- getHistory 加上 .eq('user_id', userId) 过滤条件，只查当前用户的数据
+
+【第八步】修改 components/Header.tsx
+- 右边导航加上用户邮箱显示
+- 加一个"退出登录"按钮
+- 点击退出：supabase.auth.signOut() 然后跳转到 /auth
+
+完成后测试：
+1. 未登录访问 /generate 是否跳转到登录页
+2. 注册两个不同账号，各生成几条文案
+3. 切换账号登录，确认只能看到自己的历史记录

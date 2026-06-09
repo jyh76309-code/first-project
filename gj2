@@ -1,0 +1,53 @@
+帮我解决公众号文案生成超时的问题，需要做以下几个改动：
+
+【第一步】增加 API 路由超时时间
+在 app/api/generate/route.ts 顶部添加：
+export const maxDuration = 60  // Vercel 允许最长60秒
+
+【第二步】减少公众号生成的字数要求
+修改 lib/openai.ts 里公众号的 system prompt：
+把 300-500字 改为 150-250字
+三条文案用 === 分隔，每条控制在150字左右
+字数少了生成速度会快很多
+
+【第三步】开启流式输出（最根本的解决方案）
+流式输出让文字边生成边显示，用户不需要等全部完成，
+体验从"等10秒看结果"变成"立刻看到文字逐渐出现"。
+
+修改 app/api/generate/route.ts：
+import { OpenAIStream, StreamingTextResponse } from 'ai'
+// 或者用原生 ReadableStream 实现
+
+修改 lib/openai.ts 的 generateCopy：
+const stream = await client.chat.completions.create({
+  model: 'deepseek-chat',
+  messages: [...],
+  stream: true,
+  max_tokens: 2000,
+})
+return stream
+
+修改 app/generate/page.tsx 前端接收流式数据：
+const response = await fetch('/api/generate', { method:'POST', ... })
+const reader = response.body?.getReader()
+const decoder = new TextDecoder()
+let fullText = ''
+while (true) {
+  const { done, value } = await reader.read()
+  if (done) break
+  fullText += decoder.decode(value)
+  // 实时更新显示
+  setStreamingText(fullText)
+}
+// 完成后 split('===') 得到3条文案
+const results = fullText.split('===').map(s => s.trim()).filter(s => s.length > 10)
+setResults(results)
+
+【第四步】修改 next.config.ts 增加超时配置
+module.exports = {
+  experimental: {
+    proxyTimeout: 60000,
+  }
+}
+
+完成后优先测试公众号平台，应该能在5秒内开始看到文字出现。

@@ -6,14 +6,18 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 
 const PLATFORMS = [
   { value: 'xiaohongshu', label: '小红书', emoji: '📕' },
-  { value: 'gzh', label: '公众号', emoji: '📰' },
-  { value: 'pyq', label: '朋友圈', emoji: '💬' },
+  { value: 'wechat', label: '公众号', emoji: '📰' },
+  { value: 'moments', label: '朋友圈', emoji: '💬' },
+  { value: 'weibo', label: '微博', emoji: '🌐' },
+  { value: 'zhihu', label: '知乎', emoji: '💡' },
 ] as const
 
 const PLACEHOLDER: Record<string, string> = {
   xiaohongshu: '例：夏日防晒好物推荐 ☀️',
-  gzh: '例：2025年AI行业深度分析',
-  pyq: '例：周末爬山记录',
+  wechat: '例：2025年AI行业深度分析',
+  moments: '例：周末爬山记录',
+  weibo: '例：今天发生了一件有趣的事...',
+  zhihu: '例：如何看待AI对内容创作的影响',
 }
 
 const STYLES = [
@@ -35,6 +39,7 @@ export default function GeneratePage() {
   const [style, setStyle] = useState('')
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<string[]>([])
+  const [streamingText, setStreamingText] = useState('')
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
   const [expandedSet, setExpandedSet] = useState<Set<number>>(new Set())
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null)
@@ -64,12 +69,14 @@ export default function GeneratePage() {
     return () => clearTimeout(t)
   }, [toast])
 
-  /* 提交 */
+  /* 提交（流式） */
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!topic.trim() || loading) return
 
     setLoading(true)
+    setResults([])
+    setStreamingText('')
     setToast(null)
 
     const controller = new AbortController()
@@ -87,17 +94,37 @@ export default function GeneratePage() {
         }),
       })
       clearTimeout(timer)
-      const json = await res.json()
 
-      if (!json.success) {
-        throw new Error(json.error || '生成失败')
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || '生成失败')
       }
 
-      setResults(json.results)
-      console.log('json.results:', json.results, 'length:', json.results?.length)
+      const reader = res.body?.getReader()
+      if (!reader) throw new Error('无法获取响应流')
+
+      const decoder = new TextDecoder()
+      let fullText = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        fullText += decoder.decode(value, { stream: true })
+        setStreamingText(fullText)
+      }
+
+      // 流结束，分割得到各版本文案
+      setStreamingText('')
+
+      const parts = fullText
+        .split(/\s*={3,}\s*|\s*\*{3,}\s*|\s*-{3,}\s*/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 10)
+
+      setResults(parts.length > 0 ? parts : [fullText.trim()])
       setExpandedSet(new Set())
       setToast({ message: '✨ 文案生成成功！', type: 'success' })
-      // 滚动到结果区
+
       setTimeout(() => {
         resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       }, 100)
@@ -167,7 +194,7 @@ export default function GeneratePage() {
           <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
             选择平台
           </label>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 sm:gap-3">
             {PLATFORMS.map((p) => (
               <button
                 key={p.value}
@@ -254,6 +281,22 @@ export default function GeneratePage() {
           </button>
         </div>
       </form>
+
+      {/* ----- 流式输出实时显示 ----- */}
+      {streamingText && (
+        <div className="mt-8 rounded-xl border border-[#7C3AED]/20 bg-[#7C3AED]/5 p-5 dark:border-purple-800/40 dark:bg-purple-900/10">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-[#7C3AED]" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-[#7C3AED]">
+              正在生成...
+            </span>
+          </div>
+          <div className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+            {streamingText}
+            <span className="inline-block h-4 w-0.5 animate-pulse bg-[#7C3AED] ml-0.5" />
+          </div>
+        </div>
+      )}
 
       {/* ----- 分割线 ----- */}
       {results.length > 0 && (

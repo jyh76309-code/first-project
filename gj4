@@ -1,0 +1,31 @@
+注册时一直卡在"处理中"，没有任何响应，帮我排查并修复：
+
+1. 在注册函数里加详细的 console.log 追踪每一步：
+   console.log('开始注册', username)
+   console.log('生成的假邮箱', fakeEmail)
+   // signUp 之后
+   console.log('signUp 结果', data, error)
+   // 存 profiles 之后
+   console.log('存入 profiles 结果', profileData, profileError)
+
+2. 检查注册函数是否有未捕获的异常导致卡住，
+   用 try/catch 包裹整个注册逻辑：
+   try {
+     // 注册逻辑
+   } catch (err) {
+     console.error('注册出错', err)
+     setError('注册失败，请重试')
+     setLoading(false)  // 确保 loading 状态被重置
+   } finally {
+     setLoading(false)
+   }
+
+3. 确认 setLoading(false) 在所有情况下都会被执行，
+   包括成功、失败、异常三种情况
+
+4. 检查 profiles 表是否有 fake_email 字段，
+   如果没有在 Supabase SQL Editor 运行：
+   alter table profiles add column if not exists fake_email text;
+
+修复后在浏览器按 F12 打开控制台，重新注册一次，
+把控制台输出的内容告诉我。

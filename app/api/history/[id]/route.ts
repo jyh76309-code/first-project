@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { deleteGeneration } from '@/lib/supabase'
+import { deleteGeneration } from '@/lib/supabase-server'
 
 export async function DELETE(
   _req: NextRequest,
