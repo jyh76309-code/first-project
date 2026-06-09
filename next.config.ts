@@ -1,15 +1,10 @@
-import withPWA from 'next-pwa'
+import type { NextConfig } from 'next'
 
-const nextConfig = withPWA({
-  dest: 'public',
-  register: true,
-  skipWaiting: true,
-  disable: process.env.NODE_ENV === 'development',
-})({
+const nextConfig: NextConfig = {
   devIndicators: false,
   experimental: {
     proxyTimeout: 60_000,
   },
-})
+}
 
 export default nextConfig

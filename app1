@@ -1,108 +1,66 @@
-帮我把项目改造成 PWA（渐进式网页应用），
-让用户可以把网站安装到手机桌面，像原生 App 一样使用。
+Vercel 部署失败，报错 next-pwa 和 Turbopack 不兼容。
 
-【第一步】安装 PWA 插件
-npm install next-pwa
+帮我换一个兼容的方案：
 
-【第二步】修改 next.config.ts
-import withPWA from 'next-pwa'
+【第一步】卸载 next-pwa
+npm uninstall next-pwa
 
-const nextConfig = withPWA({
-  dest: 'public',
-  register: true,
-  skipWaiting: true,
-  disable: process.env.NODE_ENV === 'development',
-})({
+【第二步】修改 next.config.ts，去掉 next-pwa 的配置，改成：
+const nextConfig = {
   devIndicators: false,
-})
+}
 
 export default nextConfig
 
-【第三步】创建 public/manifest.json
-{
-  "name": "AI文案助手",
-  "short_name": "文案助手",
-  "description": "选择平台，输入主题，10秒生成爆款文案",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#7C3AED",
-  "orientation": "portrait",
-  "icons": [
-    { "src": "/icons/icon-72x72.png", "sizes": "72x72", "type": "image/png" },
-    { "src": "/icons/icon-96x96.png", "sizes": "96x96", "type": "image/png" },
-    { "src": "/icons/icon-128x128.png", "sizes": "128x128", "type": "image/png" },
-    { "src": "/icons/icon-144x144.png", "sizes": "144x144", "type": "image/png" },
-    { "src": "/icons/icon-152x152.png", "sizes": "152x152", "type": "image/png" },
-    { "src": "/icons/icon-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/icons/icon-384x384.png", "sizes": "384x384", "type": "image/png" },
-    { "src": "/icons/icon-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
-  ]
-}
+【第三步】手动创建 Service Worker
+创建 public/sw.js：
+const CACHE_NAME = 'ai-copywriter-v1'
+const urlsToCache = ['/', '/generate', '/history']
 
-【第四步】生成图标
-创建 scripts/generate-icons.mjs：
-
-import { createCanvas } from 'canvas'
-import fs from 'fs'
-import path from 'path'
-import { fileURLToPath } from 'url'
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const sizes = [72, 96, 128, 144, 152, 192, 384, 512]
-const dir = path.join(__dirname, '../public/icons')
-if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-
-sizes.forEach(size => {
-  const canvas = createCanvas(size, size)
-  const ctx = canvas.getContext('2d')
-  ctx.fillStyle = '#7C3AED'
-  ctx.beginPath()
-  ctx.roundRect(0, 0, size, size, size * 0.2)
-  ctx.fill()
-  ctx.fillStyle = '#ffffff'
-  ctx.font = `bold ${size * 0.45}px Arial`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText('✨', size / 2, size / 2)
-  fs.writeFileSync(
-    path.join(dir, `icon-${size}x${size}.png`),
-    canvas.toBuffer('image/png')
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache))
   )
-  console.log(`生成 icon-${size}x${size}.png`)
 })
 
-然后运行：
-npm install canvas
-node scripts/generate-icons.mjs
+self.addEventListener('fetch', event => {
+  event.respondWith(
+    caches.match(event.request).then(response => {
+      return response || fetch(event.request)
+    })
+  )
+})
 
-【第五步】修改 app/layout.tsx 添加 meta 标签
-在 <head> 里添加：
-<link rel="manifest" href="/manifest.json" />
-<meta name="theme-color" content="#7C3AED" />
-<meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-status-bar-style" content="default" />
-<meta name="apple-mobile-web-app-title" content="文案助手" />
-<link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+【第四步】在 app/layout.tsx 注册 Service Worker
+在最顶部加：
+'use client' 放在一个单独的组件里
 
-【第六步】优化移动端样式
-修改 app/generate/page.tsx：
-- 平台选择 Tab 外层加 overflow-x-auto，手机上可以左右滑动
-- 生成按钮在手机端固定在底部：
-  <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t md:relative md:border-0 md:p-0">
-    <button>✨ 生成文案</button>
-  </div>
-- 整体页面底部加 pb-24 md:pb-0，防止内容被固定按钮遮挡
+创建 components/ServiceWorkerRegistration.tsx：
+'use client'
+import { useEffect } from 'react'
 
-【第七步】构建测试
+export default function ServiceWorkerRegistration() {
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js')
+        .then(() => console.log('SW registered'))
+        .catch(err => console.log('SW registration failed', err))
+    }
+  }, [])
+  return null
+}
+
+在 app/layout.tsx 引入这个组件，放在 <body> 里。
+
+【第五步】确认 public/manifest.json 还在，icons 文件夹也在
+
+【第六步】本地构建测试
 npm run build
+确认没有报错
 
-构建成功后运行：
-npm run start
+【第七步】推送到 GitHub
+git add .
+git commit -m "fix: 替换 next-pwa 为手动 Service Worker，修复 Turbopack 兼容问题"
+git push
 
-用手机浏览器打开电脑 IP 地址（终端显示的 Network 那个地址）
-安卓用 Chrome，iOS 用 Safari，
-看到"添加到主屏幕"提示就说明 PWA 配置成功了。
-
-完成后告诉我每一步的结果。
+完成后告诉我构建是否成功。

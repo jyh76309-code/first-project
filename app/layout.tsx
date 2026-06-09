@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import Header from '@/components/Header'
+import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration'
 import './globals.css'
 
 const geistSans = Geist({
@@ -48,6 +49,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        <ServiceWorkerRegistration />
         <Header />
         <main className="flex-1">{children}</main>
       </body>
